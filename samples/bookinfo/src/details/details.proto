@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package details;
+
+// HACKED: Simple gRPC surface that mirrors the HTTP payload.
+service DetailsService {
+  rpc GetDetails(DetailsRequest) returns (DetailsResponse);
+}
+
+message DetailsRequest {
+  string id = 1;
+}
+
+message DetailsResponse {
+  string id = 1;
+  string author = 2;
+  int32 year = 3;
+  string type = 4;
+  int32 pages = 5;
+  string publisher = 6;
+  string language = 7;
+  string isbn10 = 8;
+  string isbn13 = 9;
+}

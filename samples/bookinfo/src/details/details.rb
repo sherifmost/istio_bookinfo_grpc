@@ -17,6 +17,9 @@
 require 'webrick'
 require 'json'
 require 'net/http'
+# HACKED: gRPC server runtime + generated stubs
+require 'grpc'
+require_relative 'details_services_pb'
 
 if ARGV.length < 1 then
     puts "usage: #{$PROGRAM_NAME} port"
@@ -24,39 +27,65 @@ if ARGV.length < 1 then
 end
 
 port = Integer(ARGV[0])
+# HACKED: allow gRPC/HTTP to be toggled independently at runtime.
+grpc_port = ENV.fetch('GRPC_PORT', '50051').to_i
+enable_grpc = ENV.fetch('ENABLE_GRPC', 'true').downcase == 'true'
+enable_http = ENV.fetch('ENABLE_HTTP', 'false').downcase == 'true'
 
-server = WEBrick::HTTPServer.new(
-    :BindAddress => '*',
-    :Port => port,
-    :AcceptCallback => -> (s) { s.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) },
-)
-
-trap 'INT' do server.shutdown end
-
-server.mount_proc '/health' do |req, res|
-    res.status = 200
-    res.body = {'status' => 'Details is healthy'}.to_json
-    res['Content-Type'] = 'application/json'
+server = nil
+if enable_http
+  server = WEBrick::HTTPServer.new(
+      :BindAddress => '*',
+      :Port => port,
+      :AcceptCallback => -> (s) { s.setsockopt(Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1) },
+  )
+  trap 'INT' do server.shutdown end
 end
 
-server.mount_proc '/details' do |req, res|
-    pathParts = req.path.split('/')
-    headers = get_forward_headers(req)
+# HACKED: gRPC service reuses the same business logic to keep changes small.
+class DetailsServiceImpl < Details::DetailsService::Service
+  def get_details(req, _call)
+    details = get_book_details(req.id.to_i, {})
+    Details::DetailsResponse.new(
+      id: details['id'].to_s,
+      author: details[:author],
+      year: details[:year],
+      type: details[:type],
+      pages: details[:pages],
+      publisher: details[:publisher],
+      language: details[:language],
+      isbn10: details['ISBN-10'],
+      isbn13: details['ISBN-13']
+    )
+  end
+end
 
-    begin
-        begin
-          id = Integer(pathParts[-1])
-        rescue
-          raise 'please provide numeric product id'
-        end
-        details = get_book_details(id, headers)
-        res.body = details.to_json
-        res['Content-Type'] = 'application/json'
-    rescue => error
-        res.body = {'error' => error}.to_json
-        res['Content-Type'] = 'application/json'
-        res.status = 400
-    end
+if enable_http
+  server.mount_proc '/health' do |req, res|
+      res.status = 200
+      res.body = {'status' => 'Details is healthy'}.to_json
+      res['Content-Type'] = 'application/json'
+  end
+
+  server.mount_proc '/details' do |req, res|
+      pathParts = req.path.split('/')
+      headers = get_forward_headers(req)
+
+      begin
+          begin
+            id = Integer(pathParts[-1])
+          rescue
+            raise 'please provide numeric product id'
+          end
+          details = get_book_details(id, headers)
+          res.body = details.to_json
+          res['Content-Type'] = 'application/json'
+      rescue => error
+          res.body = {'error' => error}.to_json
+          res['Content-Type'] = 'application/json'
+          res.status = 400
+      end
+  end
 end
 
 # TODO: provide details on different books.
@@ -198,4 +227,18 @@ def get_forward_headers(request)
   return headers
 end
 
-server.start
+# HACKED: start gRPC server in a background thread so HTTP flow remains unchanged.
+if enable_grpc
+  grpc_server = GRPC::RpcServer.new
+  grpc_server.add_http2_port("0.0.0.0:#{grpc_port}", :this_port_is_insecure)
+  grpc_server.handle(DetailsServiceImpl.new)
+  if enable_http
+    Thread.new { grpc_server.run_till_terminated }
+  else
+    # If HTTP is disabled, block on gRPC so the container stays up.
+    grpc_server.run_till_terminated
+    exit 0
+  end
+end
+
+server.start if enable_http

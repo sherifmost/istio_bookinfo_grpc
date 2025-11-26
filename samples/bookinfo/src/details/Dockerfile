@@ -18,7 +18,9 @@ WORKDIR /opt/microservices
 COPY Gemfile Gemfile.lock /opt/microservices/
 RUN bundle install
 
-COPY details.rb /opt/microservices/
+COPY details.proto details.rb /opt/microservices/
+# HACKED: generate gRPC Ruby stubs at build time.
+RUN grpc_tools_ruby_protoc --ruby_out=. --grpc_out=. --proto_path=. details.proto
 
 ARG service_version
 ENV SERVICE_VERSION=${service_version:-v1}
