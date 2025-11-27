@@ -20,8 +20,6 @@ require 'net/http'
 # HACKED: gRPC server runtime + generated stubs
 require 'grpc'
 require_relative 'details_services_pb'
-require 'grpc/reflection'
-require 'grpc/reflection/v1alpha/reflection_pb'
 
 if ARGV.length < 1 then
     puts "usage: #{$PROGRAM_NAME} port"
@@ -234,8 +232,6 @@ if enable_grpc
   grpc_server = GRPC::RpcServer.new
   grpc_server.add_http2_port("0.0.0.0:#{grpc_port}", :this_port_is_insecure)
   grpc_server.handle(DetailsServiceImpl.new)
-  # Enable server reflection for grpcurl/grpc_cli
-  grpc_server.handle(GRPC::Reflection::V1alpha::ServerReflection::Service)
   if enable_http
     Thread.new { grpc_server.run_till_terminated }
   else
