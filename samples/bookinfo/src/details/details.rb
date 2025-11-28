@@ -47,15 +47,15 @@ class DetailsServiceImpl < Details::DetailsService::Service
   def get_details(req, _call)
     details = get_book_details(req.id.to_i, {})
     Details::DetailsResponse.new(
-      id: details['id'].to_s,
-      author: details[:author],
-      year: details[:year],
-      type: details[:type],
-      pages: details[:pages],
-      publisher: details[:publisher],
-      language: details[:language],
-      isbn10: details['ISBN-10'],
-      isbn13: details['ISBN-13']
+      id: (details['id'] || details[:id]).to_s,
+      author: details[:author] || details['author'],
+      year: details[:year] || details['year'],
+      type: details[:type] || details['type'],
+      pages: details[:pages] || details['pages'],
+      publisher: details[:publisher] || details['publisher'],
+      language: details[:language] || details['language'],
+      isbn10: details['ISBN-10'] || details[:isbn10],
+      isbn13: details['ISBN-13'] || details[:isbn13]
     )
   end
 end
