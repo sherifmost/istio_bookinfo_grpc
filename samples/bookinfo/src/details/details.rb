@@ -31,6 +31,7 @@ port = Integer(ARGV[0])
 grpc_port = ENV.fetch('GRPC_PORT', '50051').to_i
 enable_grpc = ENV.fetch('ENABLE_GRPC', 'true').downcase == 'true'
 enable_http = ENV.fetch('ENABLE_HTTP', 'false').downcase == 'true'
+grpc_pool_size = ENV.fetch('GRPC_POOL_SIZE', '128').to_i
 
 server = nil
 if enable_http
@@ -229,7 +230,7 @@ end
 
 # HACKED: start gRPC server in a background thread so HTTP flow remains unchanged.
 if enable_grpc
-  grpc_server = GRPC::RpcServer.new
+  grpc_server = GRPC::RpcServer.new(pool_size: grpc_pool_size)
   grpc_server.add_http2_port("0.0.0.0:#{grpc_port}", :this_port_is_insecure)
   grpc_server.handle(DetailsServiceImpl.new)
   if enable_http
